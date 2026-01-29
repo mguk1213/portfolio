@@ -149,7 +149,8 @@ def get_latest_news():
 # [분석 함수: 수정된 get_latest_news() 호출]
 def analyze_risk():
     news_data = get_latest_news()
-    
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel('gemini-2.5-flash') 
     prompt = f"""
     아래는 방금 수집한 최신 금융 뉴스 헤드라인입니다:
     {news_data}
@@ -293,5 +294,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
