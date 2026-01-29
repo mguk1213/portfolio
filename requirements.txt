@@ -1,3 +1,5 @@
 streamlit
 google-generativeai
 duckduckgo-search
+yfinance
+duckduckgo_search
