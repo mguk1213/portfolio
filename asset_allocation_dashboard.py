@@ -53,25 +53,37 @@ st.markdown("""
 # 2. 데이터 가져오기 함수 (캐싱 적용)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
-def get_latest_news():
-    news_text = ""
+def get_financial_data():
     try:
-        # 1. 나스닥(QQQ)과 하이일드(HYG) 관련 뉴스 가져오기
-        tickers = ["QQQ", "HYG"]
-        for ticker in tickers:
-            stock = yf.Ticker(ticker)
-            news_list = stock.news
-            
-            # 최신 뉴스 3개씩만 가져오기
-            for news in news_list[:3]:
-                title = news.get('title', '')
-                # yfinance 뉴스는 본문 전체가 없을 때가 많아 제목으로 승부
-                news_text += f"- [{ticker}] {title}\n"
-                
-    except Exception as e:
-        news_text = f"뉴스 수집 중 오류 발생: {e}"
+        # A. QQQ 데이터 및 200일 이동평균선
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=730)
         
-    return news_text
+        qqq = yf.Ticker("QQQ")
+        qqq_hist = qqq.history(start=start_date, end=end_date)
+        
+        if qqq_hist.empty:
+            st.error("QQQ 데이터를 가져올 수 없습니다.")
+            return None, None, None, None
+
+        qqq_hist['MA200'] = qqq_hist['Close'].rolling(window=200).mean()
+        
+        current_price = qqq_hist['Close'].iloc[-1]
+        current_ma200 = qqq_hist['MA200'].iloc[-1]
+        
+        # B. 하이일드 스프레드 (FRED)
+        fred_start = end_date - timedelta(days=365)
+        spread_data = web.DataReader('BAMLH0A0HYM2', 'fred', fred_start, end_date)
+        
+        spread_data = spread_data.dropna()
+        current_spread = spread_data['BAMLH0A0HYM2'].iloc[-1]
+        spread_date = spread_data.index[-1].strftime('%Y-%m-%d')
+
+        return current_price, current_ma200, current_spread, spread_date
+
+    except Exception as e:
+        st.error(f"데이터를 가져오는 중 오류가 발생했습니다: {e}")
+        return None, None, None, None
 
 # -----------------------------------------------------------------------------
 # 3. 시장 상태 판단 로직
@@ -110,6 +122,27 @@ def get_portfolio_weights(regime_code):
 # -----------------------------------------------------------------------------
 # 5. AI 리스크 분석 함수 (DuckDuckGo + Gemini)
 # -----------------------------------------------------------------------------
+# [수정된 뉴스 수집 함수: yfinance 사용]
+def get_latest_news():
+    news_text = ""
+    try:
+        # 1. 나스닥(QQQ)과 하이일드(HYG) 관련 뉴스 가져오기
+        tickers = ["QQQ", "HYG"]
+        for ticker in tickers:
+            stock = yf.Ticker(ticker)
+            news_list = stock.news
+            
+            # 최신 뉴스 3개씩만 가져오기
+            for news in news_list[:3]:
+                title = news.get('title', '')
+                # yfinance 뉴스는 본문 전체가 없을 때가 많아 제목으로 승부
+                news_text += f"- [{ticker}] {title}\n"
+                
+    except Exception as e:
+        news_text = f"뉴스 수집 중 오류 발생: {e}"
+        
+    return news_text
+
 # [분석 함수: 수정된 get_latest_news() 호출]
 def analyze_risk():
     news_data = get_latest_news()
@@ -129,8 +162,6 @@ def analyze_risk():
     
     response = model.generate_content(prompt)
     return response.text
-
-# ... (나머지 화면 표시 코드는 그대로) ...
 
 # -----------------------------------------------------------------------------
 # 6. 메인 앱 실행
@@ -258,5 +289,4 @@ def main():
                 st.markdown(f'<div class="ai-box">{result_text}</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
-
     main()
