@@ -53,37 +53,25 @@ st.markdown("""
 # 2. 데이터 가져오기 함수 (캐싱 적용)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=3600)
-def get_financial_data():
+def get_latest_news():
+    news_text = ""
     try:
-        # A. QQQ 데이터 및 200일 이동평균선
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=730)
-        
-        qqq = yf.Ticker("QQQ")
-        qqq_hist = qqq.history(start=start_date, end=end_date)
-        
-        if qqq_hist.empty:
-            st.error("QQQ 데이터를 가져올 수 없습니다.")
-            return None, None, None, None
-
-        qqq_hist['MA200'] = qqq_hist['Close'].rolling(window=200).mean()
-        
-        current_price = qqq_hist['Close'].iloc[-1]
-        current_ma200 = qqq_hist['MA200'].iloc[-1]
-        
-        # B. 하이일드 스프레드 (FRED)
-        fred_start = end_date - timedelta(days=365)
-        spread_data = web.DataReader('BAMLH0A0HYM2', 'fred', fred_start, end_date)
-        
-        spread_data = spread_data.dropna()
-        current_spread = spread_data['BAMLH0A0HYM2'].iloc[-1]
-        spread_date = spread_data.index[-1].strftime('%Y-%m-%d')
-
-        return current_price, current_ma200, current_spread, spread_date
-
+        # 1. 나스닥(QQQ)과 하이일드(HYG) 관련 뉴스 가져오기
+        tickers = ["QQQ", "HYG"]
+        for ticker in tickers:
+            stock = yf.Ticker(ticker)
+            news_list = stock.news
+            
+            # 최신 뉴스 3개씩만 가져오기
+            for news in news_list[:3]:
+                title = news.get('title', '')
+                # yfinance 뉴스는 본문 전체가 없을 때가 많아 제목으로 승부
+                news_text += f"- [{ticker}] {title}\n"
+                
     except Exception as e:
-        st.error(f"데이터를 가져오는 중 오류가 발생했습니다: {e}")
-        return None, None, None, None
+        news_text = f"뉴스 수집 중 오류 발생: {e}"
+        
+    return news_text
 
 # -----------------------------------------------------------------------------
 # 3. 시장 상태 판단 로직
@@ -122,60 +110,27 @@ def get_portfolio_weights(regime_code):
 # -----------------------------------------------------------------------------
 # 5. AI 리스크 분석 함수 (DuckDuckGo + Gemini)
 # -----------------------------------------------------------------------------
-def analyze_latest_market_risks():
-    """
-    DuckDuckGo로 뉴스를 검색하고, Gemini 2.0 Flash로 내용을 분석
-    """
-    if "GEMINI_API_KEY" not in st.secrets:
-        return "⚠️ 오류: Streamlit Secrets에 'GEMINI_API_KEY'가 설정되지 않았습니다."
+# [분석 함수: 수정된 get_latest_news() 호출]
+def analyze_risk():
+    news_data = get_latest_news()
     
-    try:
-        # 1. DuckDuckGo 검색 실행
-        keywords = ['US High Yield Spread', 'Nasdaq 100 Crash', 'Fed Rate Hike']
-        collected_news = []
-        
-        with DDGS() as ddgs:
-            for keyword in keywords:
-                # 각 키워드별 최신 뉴스 3개씩 검색
-                results = ddgs.news(keyword, region="wt-wt", safesearch="off", max_results=3)
-                if results:
-                    for r in results:
-                        collected_news.append(f"- 제목: {r['title']}\n- 내용: {r['body']}\n- 출처: {r['url']}")
+    prompt = f"""
+    아래는 방금 수집한 최신 금융 뉴스 헤드라인입니다:
+    {news_data}
+    
+    이 헤드라인들을 바탕으로 우리 포트폴리오(나스닥 기술주, 하이일드 채권)에 
+    영향을 줄 만한 '악재'가 있는지 분석해주세요.
+    
+    결과는 아래 양식으로 3줄 요약해줘:
+    1. 시장 분위기: (평온 / 경계 / 공포 중 택1)
+    2. 핵심 이슈: (헤드라인 중 가장 중요한 내용 한 문장)
+    3. 대응 조언: (현재 포트폴리오 유지 또는 리밸런싱 검토 권장)
+    """
+    
+    response = model.generate_content(prompt)
+    return response.text
 
-        if not collected_news:
-            return "⚠️ 최신 뉴스를 검색하지 못했습니다. 잠시 후 다시 시도해주세요."
-
-        news_text_block = "\n\n".join(collected_news)
-
-        # 2. Gemini 설정 및 분석 요청 (Grounding 도구 미사용)
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        # 사용자가 요청한 모델 (없을 경우 1.5-flash 등으로 변경 가능)
-        model = genai.GenerativeModel('gemini-2.5-flash') 
-        print(news_text_block)
-        prompt = f"""
-        다음은 '하이일드 스프레드', '나스닥', '연준 금리'와 관련된 최신 뉴스 기사들입니다.
-        
-        [뉴스 데이터]
-        {news_text_block}
-        
-        [요청사항]
-        위 뉴스들을 종합적으로 분석해서, 현재 시장에 [하이일드 스프레드 급등]이나 [나스닥 200일선 이탈/폭락] 같은 심각한 리스크가 감지되는지 판단해줘.
-        
-        우선 가장 큰 뉴스 3가지를 제시해주고, 
-
-        투자자 관점에서:
-        1. 현재 시장의 핵심 리스크 요인이 무엇인지 요약하고,
-        2. '평온', '경계', '공포' 중 어떤 분위기에 가까운지 의견을 제시해줘.
-        3. 답변은 한국어로, 핵심만 3줄 내외로 간결하게 작성해줘.
-        """
-        
-        response = model.generate_content(prompt)
-        
-        # 3. 결과 반환 (출처는 DuckDuckGo 결과에서 추출한 것들을 아래에 작게 표시 가능하지만, 여기선 깔끔하게 텍스트만)
-        return response.text
-        
-    except Exception as e:
-        return f"⚠️ 분석 중 오류가 발생했습니다: {str(e)}\n(duckduckgo-search 라이브러리가 설치되어 있는지 확인해주세요.)"
+# ... (나머지 화면 표시 코드는 그대로) ...
 
 # -----------------------------------------------------------------------------
 # 6. 메인 앱 실행
@@ -303,4 +258,5 @@ def main():
                 st.markdown(f'<div class="ai-box">{result_text}</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
+
     main()
