@@ -3,5 +3,7 @@ google-generativeai
 duckduckgo-search
 yfinance>=0.2.40
 pandas_datareader
+curl_cffi
 plotly
+
 
