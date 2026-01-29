@@ -1,6 +1,7 @@
 streamlit
 google-generativeai
 duckduckgo-search
-yfinance
+yfinance>=0.2.40
 pandas_datareader
 plotly
+
