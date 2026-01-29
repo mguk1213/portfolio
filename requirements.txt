@@ -3,3 +3,4 @@ google-generativeai
 duckduckgo-search
 yfinance
 pandas_datareader
+plotly
