@@ -286,11 +286,12 @@ def main():
     with st.container():
         if st.button("🚀 최신 뉴스 검색 및 리스크 분석 실행"):
             with st.spinner("DuckDuckGo에서 뉴스를 수집하고 Gemini가 분석 중입니다..."):
-                result_text = analyze_latest_market_risks()
+                result_text =  analyze_risk()
                 
                 st.markdown("#### 💡 분석 결과")
                 st.markdown(f'<div class="ai-box">{result_text}</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
+
 
