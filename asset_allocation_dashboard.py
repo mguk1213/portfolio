@@ -6,6 +6,9 @@ import plotly.express as px
 from datetime import datetime, timedelta
 import google.generativeai as genai
 from duckduckgo_search import DDGS
+from curl_cffi import requests
+
+session = requests.Session(impersonate="chrome")
 
 # -----------------------------------------------------------------------------
 # 1. 페이지 설정 및 스타일
@@ -59,7 +62,7 @@ def get_financial_data():
         end_date = datetime.now()
         start_date = end_date - timedelta(days=730)
         
-        qqq = yf.Ticker("QQQ")
+        qqq = yf.Ticker("QQQ",session = session)
         qqq_hist = qqq.history(start=start_date, end=end_date)
         
         if qqq_hist.empty:
@@ -290,3 +293,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
